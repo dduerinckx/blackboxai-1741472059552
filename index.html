@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Monitor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+        }
+        .metric-card {
+            background: linear-gradient(145deg, #2a2a2a, #333);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+        .chart-container {
+            height: 200px;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 text-gray-100">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold mb-2">System Monitor</h1>
+            <div class="flex items-center justify-center gap-4">
+                <p class="text-gray-400">
+                    Last Updated: <span id="lastUpdate" class="font-mono">-</span>
+                </p>
+                <button id="refreshBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors duration-200 flex items-center gap-2">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- CPU Card -->
+            <div class="metric-card rounded-xl p-6 shadow-lg group relative" title="Shows current CPU usage percentage and historical trend">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">
+                        <i class="fas fa-microchip mr-2"></i>CPU Usage
+                    </h2>
+                    <span id="cpuValue" class="text-2xl font-bold text-blue-400">-%</span>
+                </div>
+                <div class="bg-gray-700 rounded-full h-4 mb-4">
+                    <div id="cpuBar" class="bg-blue-500 h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="cpuChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Memory Card -->
+            <div class="metric-card rounded-xl p-6 shadow-lg group relative" title="Shows system memory usage and total available memory">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">
+                        <i class="fas fa-memory mr-2"></i>Memory Usage
+                    </h2>
+                    <span id="memValue" class="text-2xl font-bold text-green-400">-%</span>
+                </div>
+                <div class="bg-gray-700 rounded-full h-4 mb-4">
+                    <div id="memBar" class="bg-green-500 h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div id="memDetails" class="text-sm text-gray-400 mb-4">- MB used of - MB</div>
+                <div class="chart-container">
+                    <canvas id="memChart"></canvas>
+                </div>
+            </div>
+
+            <!-- GPU Card -->
+            <div class="metric-card rounded-xl p-6 shadow-lg group relative" title="Shows GPU temperature (simulated data)">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">
+                        <i class="fas fa-microchip mr-2"></i>GPU Temperature
+                    </h2>
+                    <span id="gpuValue" class="text-2xl font-bold text-purple-400">-°C</span>
+                </div>
+                <div class="bg-gray-700 rounded-full h-4 mb-4">
+                    <div id="gpuBar" class="bg-purple-500 h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="gpuChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMsg" class="hidden mt-6 p-4 bg-red-500 bg-opacity-20 border border-red-500 rounded-lg text-red-400">
+        </div>
+    </div>
+
+    <script>
+        // Initialize charts
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#9ca3af'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        color: '#9ca3af',
+                        maxTicksLimit: 5
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            animation: {
+                duration: 500
+            }
+        };
+
+        const cpuChart = new Chart(document.getElementById('cpuChart'), {
+            type: 'line',
+            data: {
+                labels: Array(20).fill(''),
+                datasets: [{
+                    data: Array(20).fill(0),
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: chartOptions
+        });
+
+        // Initialize GPU chart
+        const gpuChart = new Chart(document.getElementById('gpuChart'), {
+            type: 'line',
+            data: {
+                labels: Array(20).fill(''),
+                datasets: [{
+                    data: Array(20).fill(0),
+                    borderColor: '#a855f7',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: chartOptions
+        });
+
+        const memChart = new Chart(document.getElementById('memChart'), {
+            type: 'line',
+            data: {
+                labels: Array(20).fill(''),
+                datasets: [{
+                    data: Array(20).fill(0),
+                    borderColor: '#10b981',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: chartOptions
+        });
+
+        // Configuration
+        const SIMULATION_MODE = true; // Toggle between simulation and real metrics
+        const UPDATE_INTERVAL = 1000; // Update interval in milliseconds
+        let updateTimer = null;
+
+        // Simulate system stats with improved error handling
+        function getSystemStats() {
+            try {
+                if (Math.random() < 0.05) { // 5% chance of error for testing
+                    throw new Error("Failed to fetch system metrics");
+                }
+
+                // In a real app, this would use actual system metrics
+                return {
+                    cpu: Math.random() * 100,
+                    memory: {
+                        total: 16384, // 16GB in MB
+                        used: Math.random() * 16384
+                    },
+                    gpu: {
+                        temp: 30 + (Math.random() * 50) // Simulated temperature between 30-80°C
+                    }
+                };
+            } catch (error) {
+                console.error("Error in getSystemStats:", error);
+                throw error;
+            }
+        }
+
+        // Handle refresh button state
+        function setRefreshButtonState(isLoading) {
+            const refreshBtn = document.getElementById('refreshBtn');
+            const icon = refreshBtn.querySelector('i');
+            
+            if (isLoading) {
+                refreshBtn.disabled = true;
+                refreshBtn.classList.add('opacity-75');
+                icon.classList.add('animate-spin');
+            } else {
+                refreshBtn.disabled = false;
+                refreshBtn.classList.remove('opacity-75');
+                icon.classList.remove('animate-spin');
+            }
+        }
+
+        // Update UI with new stats and improved error handling
+        async function updateUI() {
+            try {
+                setRefreshButtonState(true);
+                const stats = await getSystemStats();
+                const timestamp = new Date().toLocaleTimeString();
+
+                // Update CPU
+                const cpuUsage = stats.cpu.toFixed(1);
+                document.getElementById('cpuValue').textContent = `${cpuUsage}%`;
+                document.getElementById('cpuBar').style.width = `${cpuUsage}%`;
+
+                // Update Memory
+                const memUsed = stats.memory.used.toFixed(0);
+                const memTotal = stats.memory.total;
+                const memPercentage = ((memUsed / memTotal) * 100).toFixed(1);
+                
+                document.getElementById('memValue').textContent = `${memPercentage}%`;
+                document.getElementById('memBar').style.width = `${memPercentage}%`;
+                document.getElementById('memDetails').textContent = 
+                    `${memUsed} MB used of ${memTotal} MB`;
+
+                // Update charts
+                cpuChart.data.datasets[0].data.shift();
+                cpuChart.data.datasets[0].data.push(parseFloat(cpuUsage));
+                cpuChart.update();
+
+                memChart.data.datasets[0].data.shift();
+                memChart.data.datasets[0].data.push(parseFloat(memPercentage));
+                memChart.update();
+
+                // Update GPU
+                const gpuTemp = stats.gpu.temp.toFixed(1);
+                const gpuPercentage = (gpuTemp / 100) * 100; // Using 100°C as max temperature
+                document.getElementById('gpuValue').textContent = `${gpuTemp}°C`;
+                document.getElementById('gpuBar').style.width = `${gpuPercentage}%`;
+
+                // Update GPU chart
+                gpuChart.data.datasets[0].data.shift();
+                gpuChart.data.datasets[0].data.push(parseFloat(gpuTemp));
+                gpuChart.update();
+
+                // Update timestamp
+                document.getElementById('lastUpdate').textContent = timestamp;
+
+                // Clear any error message
+                document.getElementById('errorMsg').classList.add('hidden');
+            } catch (error) {
+                const errorMsg = document.getElementById('errorMsg');
+                errorMsg.textContent = `Error: ${error.message}. Retrying in ${UPDATE_INTERVAL/1000} seconds...`;
+                errorMsg.classList.remove('hidden');
+                console.error("Error updating UI:", error);
+            } finally {
+                setRefreshButtonState(false);
+            }
+        }
+
+        // Setup refresh button
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            // Clear existing interval and start a new one
+            if (updateTimer) {
+                clearInterval(updateTimer);
+            }
+            updateUI();
+            updateTimer = setInterval(updateUI, UPDATE_INTERVAL);
+        });
+
+        // Initial setup
+        updateTimer = setInterval(updateUI, UPDATE_INTERVAL);
+        updateUI();
+    </script>
+</body>
+</html>
